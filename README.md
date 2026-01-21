@@ -51,6 +51,12 @@
 - Health checks
 - Rate limiting
 
+### Надёжность и консистентность
+- **Distributed locks** — защита от race conditions при конкурентных операциях
+- **Idempotency keys** — безопасные повторные запросы (retry-safe)
+- **Transaction ledger** — полный аудит всех операций в MongoDB
+- **Recovery** — автоматическое восстановление после падения сервера
+
 ---
 
 ## Технологии
@@ -117,28 +123,42 @@
 Client                    Server                     Redis                  MongoDB
    │                         │                         │                       │
    │  POST /api/bet          │                         │                       │
-   │  {id, stars}            │                         │                       │
+   │  X-Idempotency-Key: abc │                         │                       │
    │────────────────────────▶│                         │                       │
    │                         │                         │                       │
    │                         │  getAuction(id)         │                       │
    │                         │────────────────────────────────────────────────▶│
    │                         │◀────────────────────────────────────────────────│
    │                         │                         │                       │
-   │                         │  getUser(userId)        │                       │
-   │                         │────────────────────────────────────────────────▶│
-   │                         │◀────────────────────────────────────────────────│
-   │                         │                         │                       │
-   │                         │  makeBet (Lua script)   │                       │
+   │                         │  acquireUserLock()      │                       │
    │                         │────────────────────────▶│                       │
    │                         │◀────────────────────────│                       │
+   │                         │                         │                       │
+   │                         │  ┌─── CRITICAL SECTION (под локом) ───┐        │
+   │                         │  │                      │             │        │
+   │                         │  │ getUser + getLocked  │             │        │
+   │                         │  │──────────────────────────────────────────────▶
+   │                         │  │◀─────────────────────────────────────────────│
+   │                         │  │                      │             │        │
+   │                         │  │ makeBet (Lua+idem)   │             │        │
+   │                         │  │─────────────────────▶│             │        │
+   │                         │  │◀─────────────────────│             │        │
+   │                         │  │                      │             │        │
+   │                         │  │ createBetTransaction │             │        │
+   │                         │  │──────────────────────────────────────────────▶
+   │                         │  │◀─────────────────────────────────────────────│
+   │                         │  │                      │             │        │
+   │                         │  └─────────────────────────────────────┘        │
+   │                         │                         │                       │
+   │                         │  releaseUserLock()      │                       │
+   │                         │────────────────────────▶│                       │
    │                         │                         │                       │
    │                         │  [Anti-snipe check]     │                       │
    │                         │────────────────────────▶│                       │
-   │                         │◀────────────────────────│                       │
    │                         │                         │                       │
-   │  {success, bet, ...}    │                         │                       │
+   │  {success, bet,         │                         │                       │
+   │   idempotent: false}    │                         │                       │
    │◀────────────────────────│                         │                       │
-   │                         │                         │                       │
 ```
 
 ### Поток обработки раунда
@@ -253,13 +273,16 @@ cryptobot/
 │   │
 │   ├── models/               # Mongoose модели
 │   │   ├── user.ts           # User: balance, gifts
-│   │   └── auction.ts        # Auction: rounds, winners
+│   │   ├── auction.ts        # Auction: rounds, winners
+│   │   └── transaction.ts    # Transaction: ledger всех операций
 │   │
 │   ├── services/             # Бизнес-логика
 │   │   ├── auction.ts        # CRUD аукционов
 │   │   ├── bets.ts           # Ставки (Redis операции)
 │   │   ├── rounds.ts         # BullMQ worker, обработка раундов
-│   │   └── pubsub.ts         # Redis Pub/Sub для SSE
+│   │   ├── pubsub.ts         # Redis Pub/Sub для SSE
+│   │   ├── userLock.ts       # Distributed locks для пользователей
+│   │   └── idempotency.ts    # Idempotency key management
 │   │
 │   ├── routes/               # Express роуты
 │   │   ├── api.ts            # POST /api/bet, /api/auction/create
@@ -369,6 +392,48 @@ cryptobot/
 - `state`: для фильтрации активных
 - `authorId`: для аукционов пользователя
 
+#### Transactions Collection (NEW)
+
+Полный аудит всех финансовых операций:
+
+```javascript
+{
+  _id: ObjectId,
+  odId: "idem_abc123",           // Idempotency key (уникальный)
+  odType: "bet",                  // bet | bet_increase | refund | win
+  odStatus: "active",             // active | won | lost | refunded
+  odCreatedAt: ISODate(),
+  odUserId: "user_123",
+  odAuctionId: "auc_abc123",
+  odRoundIndex: 0,
+  odAmount: 500,                  // Текущая сумма ставки
+  odPreviousAmount: 0,            // Предыдущая ставка (для increase)
+  odDiff: 500                     // Сколько списали/вернули
+}
+```
+
+**Типы транзакций:**
+| Type | Описание |
+|------|----------|
+| `bet` | Первая ставка в аукционе |
+| `bet_increase` | Увеличение существующей ставки |
+| `refund` | Возврат средств проигравшему |
+| `win` | Победа в раунде |
+
+**Статусы:**
+| Status | Описание |
+|--------|----------|
+| `active` | Ставка активна, средства заблокированы |
+| `won` | Пользователь победил, средства списаны |
+| `lost` | Пользователь проиграл, средства разблокированы |
+| `refunded` | Средства возвращены |
+
+**Индексы:**
+- `odId`: unique (idempotency)
+- `odUserId, odCreatedAt`: история пользователя
+- `odAuctionId, odCreatedAt`: история аукциона
+- `odUserId, odStatus, odType`: подсчёт locked баланса
+
 ---
 
 ## Redis структуры
@@ -403,14 +468,30 @@ Score: amount * 10^10 + (MAX_TS - timestamp)
 - Сортировка по сумме (больше = выше)
 - При равной сумме - кто раньше поставил
 
-### Заблокированный баланс (STRING)
+### Idempotency Keys (STRING)
 
 ```
-Key: locked:{userId}
-Type: STRING (число)
+Key: idem:{idempotencyKey}
+Type: STRING
+TTL: 24 часа
 
-Value: 800  # Сумма всех активных ставок пользователя
+Value: "1|500|0|500|OK"  # code|amount|prevBet|diff|status
 ```
+
+**Формат:** `code|amount|previousBet|diff|status`
+- Сохраняет результат операции для идемпотентных повторов
+
+### Distributed Locks (STRING)
+
+```
+Key: lock:user:{userId}
+Type: STRING
+TTL: 5 секунд
+
+Value: "1706123456789-abc123"  # lockId для безопасного release
+```
+
+**Важно:** Locked баланс теперь считается из MongoDB (aggregation по транзакциям), а не из Redis. Это обеспечивает консистентность при падении сервера.
 
 ### Rate Limiting (STRING)
 
@@ -454,6 +535,7 @@ x-user-id: user_123
 POST /api/bet
 Content-Type: application/json
 x-user-id: user_123
+x-idempotency-key: bet_abc123_1706123456
 
 {
   "id": "auc_abc123",
@@ -461,11 +543,18 @@ x-user-id: user_123
 }
 ```
 
+**Headers:**
+| Header | Обязательный | Описание |
+|--------|--------------|----------|
+| `x-user-id` | Да | ID пользователя |
+| `x-idempotency-key` | Да | Уникальный ключ запроса (8-64 символа, `[a-zA-Z0-9-_]`) |
+
 **Response (успех):**
 ```json
 {
   "success": true,
   "status": "OK",
+  "idempotent": false,
   "auctionId": "auc_abc123",
   "bet": 100,
   "previousBet": 0,
@@ -473,6 +562,17 @@ x-user-id: user_123
   "extended": false
 }
 ```
+
+**Поля ответа:**
+| Поле | Описание |
+|------|----------|
+| `success` | Успешно ли выполнена операция |
+| `status` | `OK` или `SAME` |
+| `idempotent` | `true` если это повторный запрос с тем же ключом |
+| `bet` | Текущая ставка |
+| `previousBet` | Предыдущая ставка (0 если первая) |
+| `charged` | Сколько списано с баланса |
+| `extended` | Был ли продлён раунд (anti-snipe) |
 
 **Статусы:**
 | Status | Описание |
@@ -483,6 +583,7 @@ x-user-id: user_123
 **Ошибки:**
 | Error | HTTP | Описание |
 |-------|------|----------|
+| `INVALID_IDEMPOTENCY_KEY` | 400 | Ключ обязателен (8-64 символа) |
 | `USER_NOT_PROVIDED` | 401 | Нет x-user-id header |
 | `INVALID_AUCTION_ID` | 400 | Неверный ID аукциона |
 | `INVALID_STARS_AMOUNT` | 400 | Сумма должна быть положительным целым |
@@ -491,7 +592,7 @@ x-user-id: user_123
 | `CANNOT_BET_OWN_AUCTION` | 400 | Нельзя ставить на свой аукцион |
 | `INSUFFICIENT_BALANCE` | 400 | Недостаточно средств |
 | `CANNOT_DECREASE` | 400 | Нельзя уменьшить ставку |
-| `TOO_MANY_REQUESTS` | 429 | Rate limit превышен |
+| `TOO_MANY_REQUESTS` | 429 | Rate limit или lock contention |
 
 ---
 
@@ -663,6 +764,42 @@ x-user-id: author_123
 
 ---
 
+### GET /api/data/user/transactions
+
+Получить историю транзакций пользователя.
+
+**Query params:**
+- `limit` - максимум записей (default: 50)
+- `offset` - смещение (default: 0)
+
+**Response:**
+```json
+{
+  "transactions": [
+    {
+      "id": "idem_abc123",
+      "type": "bet",
+      "status": "active",
+      "amount": 500,
+      "auctionId": "auc_abc123",
+      "roundIndex": 0,
+      "createdAt": "2024-01-24T12:00:00Z"
+    },
+    {
+      "id": "auc_def456:user_123:win:0:place1",
+      "type": "win",
+      "status": "won",
+      "amount": 300,
+      "auctionId": "auc_def456",
+      "roundIndex": 0,
+      "createdAt": "2024-01-24T11:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
 ### SSE Endpoints
 
 #### GET /api/data/auctions/sse
@@ -803,34 +940,136 @@ x-user-id: user_123
 
 ---
 
+## Надёжность и консистентность
+
+### Distributed Locks
+
+Все операции с балансом пользователя защищены distributed lock:
+
+```typescript
+const lockResult = await withUserLock(userId, async () => {
+  // Операции с балансом выполняются атомарно
+  const [user, lockedBalance] = await Promise.all([
+    getUser(userId),
+    getLockedBalanceFromDB(userId)
+  ]);
+  const availableBalance = user.balance - lockedBalance;
+
+  // makeBet, createTransaction, etc.
+});
+```
+
+**Параметры:**
+- `TTL`: 5 секунд (автоматический release при падении)
+- `Retry`: до 500 попыток с jitter
+- `Delay`: 20-40ms между попытками
+
+### Idempotency
+
+Все POST запросы требуют `X-Idempotency-Key`:
+
+```
+Клиент                     Сервер
+   │  POST /api/bet           │
+   │  X-Idempotency-Key: abc  │
+   │─────────────────────────▶│
+   │                          │  Redis: SETNX idem:abc
+   │                          │  Выполнить операцию
+   │                          │  Redis: SET idem:abc = result
+   │◀─────────────────────────│
+   │  {success: true}         │
+   │                          │
+   │  [Retry - сеть упала]    │
+   │  POST /api/bet           │
+   │  X-Idempotency-Key: abc  │
+   │─────────────────────────▶│
+   │                          │  Redis: GET idem:abc → result
+   │◀─────────────────────────│
+   │  {success: true,         │
+   │   idempotent: true}      │  ← Тот же результат, без повторного выполнения
+```
+
+**TTL ключа:** 24 часа
+
+### Transaction Ledger
+
+Все финансовые операции записываются в MongoDB:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Redis     │     │   MongoDB   │     │   MongoDB   │
+│   (cache)   │     │   (users)   │     │(transactions│
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       │ makeBet()         │                   │
+       │ ─────────────────▶│                   │
+       │                   │                   │
+       │                   │ createBetTx()     │
+       │                   │ ─────────────────▶│
+       │                   │                   │
+       │ locked = SUM(active transactions)     │
+       │◀──────────────────────────────────────│
+```
+
+**Преимущества:**
+- Locked баланс восстанавливается после падения сервера
+- Полный аудит всех операций
+- Возможность отладки и расследования
+
+### Recovery после падения
+
+**Сценарий:** Сервер упал между Redis и MongoDB
+
+```
+1. makeBet() → Redis записал ставку + idempotency key
+2. [CRASH]
+3. createBetTransaction() → НЕ выполнилось
+```
+
+**Recovery при retry:**
+
+```
+1. Клиент повторяет запрос с тем же idempotency key
+2. makeBet() → возвращает сохранённый результат (idempotent: true)
+3. createBetTransaction() → выполняется (upsert)
+4. MongoDB синхронизирована!
+```
+
+---
+
 ## Система ставок
 
 ### Lua скрипт makeBet
 
-Атомарная операция в Redis, гарантирующая консистентность:
+Атомарная и идемпотентная операция в Redis:
 
 ```lua
 -- Входные данные
-KEYS[1] = user:{userId}:bets      -- HASH
-KEYS[2] = auction:{auctionId}:bets -- ZSET
-KEYS[3] = locked:{userId}          -- STRING
+KEYS[1] = user:{userId}:bets       -- HASH: ставки пользователя
+KEYS[2] = auction:{auctionId}:bets -- ZSET: ставки в аукционе
+KEYS[3] = idem:{idempotencyKey}    -- STRING: результат операции
 ARGV[1] = auctionId
 ARGV[2] = userId
 ARGV[3] = newAmount
-ARGV[4] = userBalance
+ARGV[4] = availableBalance         -- Уже вычислен: balance - locked
 ARGV[5] = timestamp
+ARGV[6] = idempotencyKey
 
 -- Логика
-1. Получить текущую ставку из HASH
-2. Если та же сумма → return SAME (идемпотентность)
-3. Если меньше → return CANNOT_DECREASE
-4. Вычислить diff = newAmount - oldBet
-5. Проверить availableBalance >= diff
-6. Атомарно обновить:
+1. Проверить idempotency key:
+   - Если существует → вернуть сохранённый результат + флаг IDEMPOTENT
+2. Получить текущую ставку из HASH
+3. Если та же сумма → return SAME, сохранить в idem key
+4. Если меньше → return CANNOT_DECREASE (не сохранять в idem)
+5. Вычислить diff = newAmount - oldBet
+6. Проверить availableBalance + oldBet >= newAmount
+7. Атомарно обновить:
    - HASH: user:bets[auctionId] = newAmount
    - ZSET: auction:bets[userId] = compositeScore
-   - STRING: locked += diff
+   - STRING: idem:key = result (TTL 24h)
 ```
+
+**Важно:** Locked баланс НЕ хранится в Redis — он вычисляется из MongoDB транзакций. Это обеспечивает консистентность при падении.
 
 ### Композитный score в ZSET
 
@@ -854,13 +1093,28 @@ User C: 300 stars в 11:59:00 → score = 3000000000009999999
 ### Блокировка баланса
 
 ```
-Общий баланс:     balance (MongoDB)
-Заблокировано:    locked (Redis)
+Общий баланс:     balance (MongoDB users)
+Заблокировано:    locked = SUM(transactions WHERE status='active')
 Доступно:         available = balance - locked
+```
 
-При ставке:       locked += diff
-При победе:       locked -= bet, balance -= bet
-При проигрыше:    locked -= bet (баланс не меняется)
+**Как считается locked:**
+```javascript
+// MongoDB aggregation
+Transaction.aggregate([
+  { $match: { odUserId: userId, odStatus: 'active', odType: { $in: ['bet', 'bet_increase'] } } },
+  { $sort: { odAuctionId: 1, odCreatedAt: 1 } },
+  { $group: { _id: '$odAuctionId', lastAmount: { $last: '$odAmount' } } },
+  { $group: { _id: null, total: { $sum: '$lastAmount' } } }
+])
+```
+
+**Жизненный цикл транзакции:**
+```
+При ставке:       Transaction(status='active') → locked += diff
+При победе:       Transaction(status='won')    → locked = 0, balance -= bet
+При проигрыше:    Transaction(status='lost')   → locked = 0 (баланс не меняется)
+При возврате:     Transaction(status='refunded') → возврат средств
 ```
 
 ---
@@ -1079,10 +1333,20 @@ npm run test:overhigh
 - Возврат locked проигравшим
 
 #### high.test.ts
-- 100 пользователей
-- 10 параллельных аукционов
-- 3 раунда в каждом
-- Проверка всех балансов и призов
+Жёсткие стресс-тесты на надёжность:
+
+| Тест | Описание |
+|------|----------|
+| Extreme Concurrency | 200 параллельных ставок |
+| Double Spending Attack | Попытка потратить баланс дважды |
+| Idempotency Storm | 50 запросов с одним ключом |
+| Race Condition Torture | Быстрые увеличения ставки |
+| Balance Drain Attack | 10 ставок на разные аукционы |
+| Anti-Snipe Flood | Массовые ставки в последние секунды |
+| Winner Processing Stress | 50 участников, 20 победителей |
+| Transaction Ledger Consistency | Проверка соответствия транзакций |
+| Lock Contention Stress | Нагрузка на distributed locks |
+| Full System Load | 5 авторов, 20 участников, 3 раунда |
 
 #### overhigh.test.ts
 - 2000 пользователей
@@ -1227,6 +1491,43 @@ docker-compose exec redis redis-cli INFO memory
 
 # Node.js память
 docker stats cryptobot_app_1
+```
+
+### TOO_MANY_REQUESTS при ставках
+
+```bash
+# Проверить lock contention
+# Если много конкурентных запросов от одного юзера:
+# - MAX_RETRIES = 500 (src/services/userLock.ts)
+# - RETRY_DELAY = 20-40ms с jitter
+
+# Проверить активные локи
+docker-compose exec redis redis-cli
+> KEYS lock:user:*
+```
+
+### Транзакции не синхронизированы
+
+```bash
+# Проверить транзакции юзера
+docker-compose exec mongo mongosh
+> use cryptobot
+> db.transactions.find({ odUserId: "user_123" }).sort({ odCreatedAt: -1 })
+
+# Сравнить с Redis
+docker-compose exec redis redis-cli
+> HGETALL user:user_123:bets
+```
+
+### Idempotency key конфликт
+
+```bash
+# Проверить существующий ключ
+docker-compose exec redis redis-cli
+> GET idem:your_key_here
+> TTL idem:your_key_here
+
+# Ключи живут 24 часа, потом автоудаляются
 ```
 
 ---
