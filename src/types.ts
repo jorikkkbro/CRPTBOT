@@ -57,3 +57,23 @@ export interface CreateAuctionInput {
   startTime: number;         // когда начинаем
   rounds: AuctionRound[];    // план раундов
 }
+
+// Типы транзакций
+export type TransactionType = 'bet' | 'bet_increase' | 'refund' | 'win';
+
+// Статусы транзакций
+export type TransactionStatus = 'active' | 'won' | 'lost' | 'refunded';
+
+// Transaction (MongoDB)
+export interface Transaction {
+  odId: string;              // уникальный ID операции
+  odType: TransactionType;
+  odStatus: TransactionStatus;
+  odCreatedAt: Date;
+  odUserId: string;
+  odAuctionId: string;
+  odRoundIndex: number;      // номер раунда (-1 если до начала)
+  odAmount: number;          // сумма ставки
+  odPreviousAmount: number;  // предыдущая ставка (для bet_increase)
+  odDiff: number;            // разница (сколько списали/вернули)
+}

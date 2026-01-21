@@ -4,8 +4,10 @@ import { getAuction, isAuctionActive, createAuction } from '../services/auction'
 import { makeBet, getTopBets } from '../services/bets';
 import { extendRound } from '../services/rounds';
 import { notifyAuctionUpdate } from '../services/pubsub';
+import { createBetTransaction, getLockedBalanceFromDB } from '../models/transaction';
 import { CreateAuctionInput } from '../types';
 import { betRateLimit, createAuctionRateLimit } from '../middleware/rateLimit';
+import { withUserLock } from '../services/userLock';
 
 // Anti-snipe константы
 const ANTI_SNIPE_THRESHOLD_SECONDS = 10;  // Если осталось <= 10 секунд
@@ -13,13 +15,29 @@ const ANTI_SNIPE_EXTEND_SECONDS = 5;      // Продлить на 5 секун�
 
 const router = Router();
 
+// Валидация idempotency key
+function isValidIdempotencyKey(key: string | undefined): key is string {
+  if (!key || typeof key !== 'string') return false;
+  if (key.length < 8 || key.length > 64) return false;
+  return /^[a-zA-Z0-9-_]+$/.test(key);
+}
+
 // POST /api/bet
 // Body: { id: string, stars: number }
-// Header: x-user-id (временно, потом через auth)
+// Headers: x-user-id, x-idempotency-key (обязательный)
 router.post('/bet', betRateLimit, async (req: Request, res: Response) => {
   try {
     const userId = req.headers['x-user-id'] as string;
+    const idempotencyKey = req.headers['x-idempotency-key'] as string;
     const { id: auctionId, stars } = req.body;
+
+    // Валидация idempotency key (ОБЯЗАТЕЛЬНЫЙ)
+    if (!isValidIdempotencyKey(idempotencyKey)) {
+      return res.status(400).json({
+        error: 'INVALID_IDEMPOTENCY_KEY',
+        message: 'X-Idempotency-Key header is required (8-64 alphanumeric chars)'
+      });
+    }
 
     // Валидация входных данных
     if (!userId) {
@@ -49,11 +67,46 @@ router.post('/bet', betRateLimit, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'CANNOT_BET_OWN_AUCTION' });
     }
 
-    // Получаем юзера и его баланс
-    const user = await getUser(userId);
+    // === КРИТИЧЕСКАЯ СЕКЦИЯ: используем distributed lock ===
+    // Это предотвращает race condition при конкурентных ставках
+    const lockResult = await withUserLock(userId, async () => {
+      // Получаем юзера и вычисляем доступный баланс ПОД ЛОКОМ
+      const [user, lockedBalance] = await Promise.all([
+        getUser(userId),
+        getLockedBalanceFromDB(userId)
+      ]);
+      const availableBalance = user.balance - lockedBalance;
 
-    // Атомарная и идемпотентная ставка
-    const result = await makeBet(userId, auctionId, stars, user.balance);
+      // Атомарная и идемпотентная ставка (с idempotency key)
+      const betResult = await makeBet(userId, auctionId, stars, availableBalance, idempotencyKey);
+
+      // Записываем транзакцию в БД (ВСЕГДА при успехе, даже при idempotent)
+      // createBetTransaction использует upsert — безопасно вызывать повторно
+      // Это гарантирует recovery если сервер упал между Redis и MongoDB
+      if (betResult.success) {
+        await createBetTransaction(
+          idempotencyKey,  // используется как odId для идемпотентности
+          userId,
+          auctionId,
+          auction.currentRound,
+          betResult.amount,
+          betResult.previousBet,
+          betResult.diff
+        );
+      }
+
+      return betResult;
+    });
+
+    // Не удалось захватить лок (слишком много конкурентных запросов)
+    if (!lockResult.success) {
+      return res.status(429).json({
+        error: 'TOO_MANY_REQUESTS',
+        message: 'Please retry your request'
+      });
+    }
+
+    const result = lockResult.result;
 
     if (!result.success) {
       const messages: Record<string, string> = {
@@ -101,6 +154,7 @@ router.post('/bet', betRateLimit, async (req: Request, res: Response) => {
     return res.json({
       success: true,
       status: result.status,
+      idempotent: result.idempotent,  // флаг повторного запроса
       auctionId,
       bet: result.amount,           // текущая ставка
       previousBet: result.previousBet, // была до этого
@@ -116,11 +170,20 @@ router.post('/bet', betRateLimit, async (req: Request, res: Response) => {
 
 // POST /api/auction/create
 // Body: { name, giftName, giftCount, startTime, rounds }
-// Header: x-user-id
+// Headers: x-user-id, x-idempotency-key (обязательный)
 router.post('/auction/create', createAuctionRateLimit, async (req: Request, res: Response) => {
   try {
     const userId = req.headers['x-user-id'] as string;
+    const idempotencyKey = req.headers['x-idempotency-key'] as string;
     const { name, giftName, giftCount, startTime, rounds } = req.body;
+
+    // Валидация idempotency key (ОБЯЗАТЕЛЬНЫЙ)
+    if (!isValidIdempotencyKey(idempotencyKey)) {
+      return res.status(400).json({
+        error: 'INVALID_IDEMPOTENCY_KEY',
+        message: 'X-Idempotency-Key header is required (8-64 alphanumeric chars)'
+      });
+    }
 
     // Валидация userId
     if (!userId) {
@@ -163,7 +226,7 @@ router.post('/auction/create', createAuctionRateLimit, async (req: Request, res:
       rounds
     };
 
-    const result = await createAuction(userId, input);
+    const result = await createAuction(userId, input, idempotencyKey);
 
     if (!result.success) {
       if (result.error === 'INSUFFICIENT_GIFTS') {
@@ -174,6 +237,12 @@ router.post('/auction/create', createAuctionRateLimit, async (req: Request, res:
           need: result.need
         });
       }
+      if (result.error === 'IDEMPOTENCY_CONFLICT') {
+        return res.status(409).json({
+          error: result.error,
+          message: result.message
+        });
+      }
       return res.status(400).json({
         error: result.error,
         message: result.message
@@ -182,6 +251,7 @@ router.post('/auction/create', createAuctionRateLimit, async (req: Request, res:
 
     return res.json({
       success: true,
+      idempotent: result.idempotent || false,  // флаг повторного запроса
       auction: {
         id: result.auction.id,
         name: result.auction.name,

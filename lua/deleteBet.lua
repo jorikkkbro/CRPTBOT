@@ -1,13 +1,14 @@
--- Атомарное удаление ставки
+-- Атомарное удаление ставки из Redis кэша
+-- Locked баланс теперь в MongoDB, не в Redis
 -- KEYS[1] = user:{userId}:bets (HASH)
 -- KEYS[2] = auction:{auctionId}:bets (ZSET)
--- KEYS[3] = locked:{userId}
 -- ARGV[1] = auctionId
+-- ARGV[2] = userId
 
 local userBetsKey = KEYS[1]
 local auctionBetsKey = KEYS[2]
-local lockedKey = KEYS[3]
 local auctionId = ARGV[1]
+local userId = ARGV[2]
 
 -- Получаем текущую ставку
 local oldBet = tonumber(redis.call('HGET', userBetsKey, auctionId)) or 0
@@ -19,15 +20,9 @@ end
 -- Удаляем ставку из HASH
 redis.call('HDEL', userBetsKey, auctionId)
 
--- Получаем userId из ARGV[2] если передан, иначе ищем по auctionBetsKey
-local userId = ARGV[2]
+-- Удаляем из ZSET
 if userId then
   redis.call('ZREM', auctionBetsKey, userId)
 end
-
--- Уменьшаем locked баланс
-local currentLocked = tonumber(redis.call('GET', lockedKey)) or 0
-local newLocked = math.max(0, currentLocked - oldBet)
-redis.call('SET', lockedKey, newLocked)
 
 return oldBet

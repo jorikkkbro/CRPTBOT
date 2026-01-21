@@ -872,6 +872,13 @@
       }
     }
 
+    // Генерация уникального idempotency key
+    function generateIdempotencyKey() {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).slice(2, 10);
+      return `${timestamp}-${random}`;
+    }
+
     // Create auction
     async function createAuction() {
       const name = document.getElementById('auction-name').value.trim();
@@ -914,7 +921,8 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-id': currentUserId
+            'x-user-id': currentUserId,
+            'x-idempotency-key': generateIdempotencyKey()
           },
           body: JSON.stringify({
             name,

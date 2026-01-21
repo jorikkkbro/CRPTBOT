@@ -957,6 +957,13 @@
       input.value = current + amount;
     }
 
+    // Генерация уникального idempotency key
+    function generateIdempotencyKey() {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).slice(2, 10);
+      return `${timestamp}-${random}`;
+    }
+
     async function placeBet() {
       const amount = parseInt(document.getElementById('bet-amount').value);
 
@@ -970,7 +977,8 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-id': currentUserId
+            'x-user-id': currentUserId,
+            'x-idempotency-key': generateIdempotencyKey()
           },
           body: JSON.stringify({
             id: auctionId,

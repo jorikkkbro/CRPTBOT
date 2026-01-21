@@ -1,17 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { getUser, getBalance, getUserGiftCount } from '../models/user';
+import { getUser, getBalance, getUserGiftCount, getLockedBalance } from '../models/user';
 import { getAuction, getActiveAuctions, getUserAuctions } from '../services/auction';
 import {
   getBet,
   getUserBets,
   getTopBets,
-  getAuctionBets,
   getUserRank,
-  getAuctionBetsCount,
-  getLockedBalance
+  getAuctionBetsCount
 } from '../services/bets';
 import { subscribeToAuctions, subscribeToAuction } from '../services/pubsub';
 import { dataRateLimit } from '../middleware/rateLimit';
+import { getUserTransactions } from '../models/transaction';
 
 const router = Router();
 
@@ -141,6 +140,38 @@ router.get('/user/auctions', async (req: Request, res: Response) => {
     return res.json({ auctions });
   } catch (error) {
     console.error('Get user auctions error:', error);
+    return res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
+});
+
+// GET /api/data/user/transactions
+// Получить историю транзакций юзера
+router.get('/user/transactions', async (req: Request, res: Response) => {
+  try {
+    const userId = req.headers['x-user-id'] as string;
+    if (!userId) {
+      return res.status(401).json({ error: 'USER_NOT_PROVIDED' });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const transactions = await getUserTransactions(userId, limit, offset);
+
+    // Маппим в формат ожидаемый тестом
+    const mappedTransactions = transactions.map(t => ({
+      id: t.odId,
+      type: t.odType,
+      status: t.odStatus,
+      amount: t.odDiff,  // diff - сколько реально списали/вернули
+      auctionId: t.odAuctionId,
+      roundIndex: t.odRoundIndex,
+      createdAt: t.odCreatedAt
+    }));
+
+    return res.json({ transactions: mappedTransactions });
+  } catch (error) {
+    console.error('Get transactions error:', error);
     return res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });
