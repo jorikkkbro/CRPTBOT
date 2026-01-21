@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Аукцион</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+
+    .back-link {
+      color: #8b5cf6;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+
+    h1 {
+      font-size: 24px;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .user-panel {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .user-balance {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fbbf24;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #2a2a2a;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(180deg, #6366f1, #8b5cf6);
+      border-radius: 2px;
+    }
+
+    /* Auction Header */
+    .auction-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .auction-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .auction-state {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .state-active {
+      background: #22c55e33;
+      color: #22c55e;
+    }
+
+    .state-pending {
+      background: #fbbf2433;
+      color: #fbbf24;
+    }
+
+    .state-finished {
+      background: #64748b33;
+      color: #64748b;
+    }
+
+    .auction-meta {
+      display: flex;
+      gap: 30px;
+      margin-top: 15px;
+    }
+
+    .meta-item {
+      text-align: center;
+    }
+
+    .meta-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    .meta-value.timer {
+      color: #fbbf24;
+      font-family: monospace;
+    }
+
+    /* Grid Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 20px;
+    }
+
+    @media (max-width: 800px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Rounds Plan */
+    .rounds-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .round-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 12px 15px;
+      background: #222;
+      border-radius: 8px;
+      border-left: 4px solid #333;
+    }
+
+    .round-item.active {
+      border-left-color: #22c55e;
+      background: #22c55e11;
+    }
+
+    .round-item.completed {
+      border-left-color: #6366f1;
+      opacity: 0.6;
+    }
+
+    .round-number {
+      font-weight: 700;
+      font-size: 16px;
+      color: #8b5cf6;
+      min-width: 80px;
+    }
+
+    .round-info {
+      flex: 1;
+    }
+
+    .round-duration {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .round-prizes {
+      display: flex;
+      gap: 8px;
+    }
+
+    .prize-badge {
+      background: #fbbf2433;
+      color: #fbbf24;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* Bet Form */
+    .bet-form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .bet-form input {
+      flex: 1;
+      padding: 15px;
+      background: #0f0f0f;
+      border: 2px solid #333;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 18px;
+      text-align: center;
+    }
+
+    .bet-form input:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    .btn {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .quick-bets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .quick-bet {
+      padding: 8px 16px;
+      background: #333;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .quick-bet:hover {
+      background: #444;
+    }
+
+    /* Leaderboard */
+    .leaderboard {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .leader-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #222;
+      border-radius: 8px;
+    }
+
+    .leader-item.winner {
+      background: #22c55e22;
+      border: 1px solid #22c55e44;
+    }
+
+    .leader-item.me {
+      background: #6366f122;
+      border: 1px solid #6366f144;
+    }
+
+    .leader-rank {
+      font-weight: 700;
+      font-size: 16px;
+      min-width: 30px;
+      text-align: center;
+    }
+
+    .leader-rank.gold { color: #fbbf24; }
+    .leader-rank.silver { color: #94a3b8; }
+    .leader-rank.bronze { color: #cd7f32; }
+
+    .leader-info {
+      flex: 1;
+    }
+
+    .leader-name {
+      font-weight: 500;
+    }
+
+    .leader-amount {
+      font-weight: 700;
+      color: #8b5cf6;
+    }
+
+    .winner-badge {
+      background: #22c55e;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Stats */
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .stats-row:last-child {
+      border-bottom: none;
+    }
+
+    .stats-label {
+      color: #888;
+    }
+
+    .stats-value {
+      font-weight: 600;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 15px 25px;
+      background: #22c55e;
+      color: white;
+      border-radius: 8px;
+      font-weight: 500;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      background: #ef4444;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    /* My Bet */
+    .my-bet-card {
+      background: linear-gradient(135deg, #6366f122, #8b5cf622);
+      border: 1px solid #6366f144;
+    }
+
+    .my-bet-amount {
+      font-size: 32px;
+      font-weight: 700;
+      color: #8b5cf6;
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    .my-bet-rank {
+      text-align: center;
+      color: #888;
+    }
+
+    .my-bet-rank span {
+      color: #22c55e;
+      font-weight: 600;
+    }
+
+    /* Finished Banner */
+    .finished-banner {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border: 2px solid #6366f1;
+      text-align: center;
+      padding: 30px;
+    }
+
+    .finished-banner h2 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #fbbf24, #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .finished-banner p {
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    /* Winners List */
+    .winners-card {
+      background: linear-gradient(135deg, #22c55e11, #16a34a11);
+      border: 1px solid #22c55e44;
+    }
+
+    .winners-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .winner-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      border-left: 4px solid #22c55e;
+    }
+
+    .winner-item.me {
+      background: #6366f122;
+      border-left-color: #6366f1;
+    }
+
+    .winner-place {
+      font-size: 24px;
+      font-weight: 700;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    .winner-place.gold { color: #fbbf24; }
+    .winner-place.silver { color: #94a3b8; }
+    .winner-place.bronze { color: #cd7f32; }
+
+    .winner-details {
+      flex: 1;
+    }
+
+    .winner-name {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .winner-bet {
+      color: #888;
+      font-size: 14px;
+      margin-top: 2px;
+    }
+
+    .winner-prize {
+      text-align: right;
+    }
+
+    .winner-prize-amount {
+      font-size: 20px;
+      font-weight: 700;
+      color: #22c55e;
+    }
+
+    .winner-prize-label {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .round-header {
+      font-size: 14px;
+      color: #8b5cf6;
+      font-weight: 600;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <a href="/" class="back-link">&larr; Назад к списку</a>
+        <h1 id="auction-title">Загрузка...</h1>
+      </div>
+      <div class="user-panel">
+        <div class="user-balance"><span id="display-balance">0</span> stars</div>
+      </div>
+    </header>
+
+    <!-- Auction Info -->
+    <div class="card">
+      <div class="auction-header">
+        <div>
+          <div class="auction-meta">
+            <div class="meta-item">
+              <div class="meta-label">Приз</div>
+              <div class="meta-value" id="prize-info">-</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Раунд</div>
+              <div class="meta-value" id="round-info">-</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Участников</div>
+              <div class="meta-value" id="participants-count">0</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label" id="timer-label">Осталось</div>
+              <div class="meta-value timer" id="timer">--:--</div>
+            </div>
+          </div>
+        </div>
+        <div class="auction-state state-pending" id="auction-state">Загрузка</div>
+      </div>
+    </div>
+
+    <!-- Finished Banner -->
+    <div class="card finished-banner" id="finished-section" style="display: none;">
+      <h2>Аукцион завершён!</h2>
+      <p>Поздравляем победителей!</p>
+    </div>
+
+    <!-- Winners Section -->
+    <div class="card winners-card" id="winners-section" style="display: none;">
+      <h3 class="card-title">Победители</h3>
+      <div class="winners-list" id="winners-list"></div>
+    </div>
+
+    <div class="grid">
+      <div class="main-content">
+        <!-- Bet Form -->
+        <div class="card" id="bet-section">
+          <h3 class="card-title">Сделать ставку</h3>
+          <div class="bet-form">
+            <input type="number" id="bet-amount" placeholder="Сумма ставки" min="1">
+            <button class="btn btn-primary" id="bet-btn" onclick="placeBet()">Поставить</button>
+          </div>
+          <div class="quick-bets">
+            <button class="quick-bet" onclick="setQuickBet(10)">+10</button>
+            <button class="quick-bet" onclick="setQuickBet(50)">+50</button>
+            <button class="quick-bet" onclick="setQuickBet(100)">+100</button>
+            <button class="quick-bet" onclick="setQuickBet(500)">+500</button>
+            <button class="quick-bet" onclick="setQuickBet(1000)">+1000</button>
+          </div>
+        </div>
+
+        <!-- My Bet -->
+        <div class="card my-bet-card" id="my-bet-section" style="display: none;">
+          <h3 class="card-title">Моя ставка</h3>
+          <div class="my-bet-amount" id="my-bet-amount">0</div>
+          <div class="my-bet-rank">Позиция: <span id="my-bet-rank">-</span></div>
+        </div>
+
+        <!-- Rounds Plan -->
+        <div class="card">
+          <h3 class="card-title">План аукциона</h3>
+          <div class="rounds-list" id="rounds-list">
+            <div class="empty-state">Загрузка...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <!-- Leaderboard -->
+        <div class="card">
+          <h3 class="card-title">Таблица лидеров</h3>
+          <div class="leaderboard" id="leaderboard">
+            <div class="empty-state">Нет ставок</div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="card">
+          <h3 class="card-title">Статистика</h3>
+          <div class="stats-row">
+            <span class="stats-label">Всего ставок</span>
+            <span class="stats-value" id="total-bets">0</span>
+          </div>
+          <div class="stats-row">
+            <span class="stats-label">Общий банк</span>
+            <span class="stats-value" id="total-pool">0 stars</span>
+          </div>
+          <div class="stats-row">
+            <span class="stats-label">Мин. ставка для топ-1</span>
+            <span class="stats-value" id="min-top1">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const auctionId = urlParams.get('id');
+    const currentUserId = localStorage.getItem('userId') || '';
+
+    let auctionSSE = null;
+    let currentAuction = null;
+    let currentBets = [];
+    let myBet = null;
+
+    if (!auctionId) {
+      window.location.href = '/';
+    }
+
+    if (!currentUserId) {
+      window.location.href = '/';
+    }
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+      loadBalance();
+      connectSSE();
+    });
+
+    async function loadBalance() {
+      try {
+        const res = await fetch('/api/data/user/balance', {
+          headers: { 'x-user-id': currentUserId }
+        });
+        const data = await res.json();
+        document.getElementById('display-balance').textContent = data.available ?? data.balance ?? 0;
+      } catch (e) {
+        console.error('Failed to load balance:', e);
+      }
+    }
+
+    function connectSSE() {
+      if (auctionSSE) {
+        auctionSSE.close();
+      }
+
+      auctionSSE = new EventSource(`/api/data/auction/${auctionId}/sse`);
+
+      auctionSSE.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.error) {
+            showToast('Аукцион не найден', true);
+            setTimeout(() => window.location.href = '/', 2000);
+            return;
+          }
+
+          currentAuction = data.auction;
+          currentBets = data.bets || [];
+
+          renderAuction();
+          renderLeaderboard();
+          renderRounds();
+          updateMyBet();
+        } catch (e) {
+          console.error('SSE parse error:', e);
+        }
+      };
+
+      auctionSSE.onerror = () => {
+        console.error('SSE error, reconnecting...');
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    function renderAuction() {
+      const a = currentAuction;
+      if (!a) return;
+
+      document.getElementById('auction-title').textContent = a.name;
+      document.title = `${a.name} - Аукцион`;
+
+      // State
+      const stateEl = document.getElementById('auction-state');
+      const stateText = {
+        'pending': 'Ожидание',
+        'active': 'Активен',
+        'finished': 'Завершён',
+        'cancelled': 'Отменён'
+      }[a.state] || a.state;
+      stateEl.textContent = stateText;
+      stateEl.className = `auction-state state-${a.state}`;
+
+      // Prize
+      document.getElementById('prize-info').textContent = `${a.gift.count} ${a.gift.name}`;
+
+      // Round
+      const currentRound = a.currentRound >= 0 ? a.currentRound + 1 : 0;
+      document.getElementById('round-info').textContent = `${currentRound} / ${a.rounds.length}`;
+
+      // Participants
+      document.getElementById('participants-count').textContent = currentBets.length;
+
+      // Timer
+      const timerLabel = document.getElementById('timer-label');
+      const timerEl = document.getElementById('timer');
+
+      if (a.state === 'active' && a.rounds[a.currentRound]) {
+        timerLabel.textContent = 'Осталось';
+        const roundDuration = a.rounds[a.currentRound].duration * 1000;
+        const elapsed = Date.now() - a.startTime;
+        let totalElapsed = elapsed;
+        for (let i = 0; i < a.currentRound; i++) {
+          totalElapsed -= a.rounds[i].duration * 1000;
+        }
+        const remaining = Math.max(0, roundDuration - totalElapsed);
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+      } else if (a.state === 'pending') {
+        timerLabel.textContent = 'До старта';
+        const remaining = Math.max(0, a.startTime - Date.now());
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+      } else {
+        timerLabel.textContent = 'Статус';
+        timerEl.textContent = '--:--';
+      }
+
+      // Bet section visibility
+      const betSection = document.getElementById('bet-section');
+      const betBtn = document.getElementById('bet-btn');
+      const finishedSection = document.getElementById('finished-section');
+      const winnersSection = document.getElementById('winners-section');
+
+      if (a.state === 'active') {
+        betSection.style.display = 'block';
+        betBtn.disabled = false;
+        finishedSection.style.display = 'none';
+        winnersSection.style.display = 'none';
+      } else if (a.state === 'pending') {
+        betSection.style.display = 'block';
+        betBtn.disabled = true;
+        finishedSection.style.display = 'none';
+        winnersSection.style.display = 'none';
+      } else if (a.state === 'finished') {
+        betSection.style.display = 'none';
+        finishedSection.style.display = 'block';
+        winnersSection.style.display = 'block';
+        renderWinners();
+      } else {
+        betSection.style.display = 'none';
+        finishedSection.style.display = 'none';
+        winnersSection.style.display = 'none';
+      }
+
+      // Stats
+      if (a.state === 'finished') {
+        document.getElementById('total-bets').textContent = a.winners?.length || 0;
+        const totalPrizes = a.winners?.reduce((sum, w) => sum + w.prize, 0) || 0;
+        document.getElementById('total-pool').textContent = `${totalPrizes} ${a.gift.name}`;
+        document.getElementById('min-top1').textContent = '-';
+      } else {
+        document.getElementById('total-bets').textContent = currentBets.length;
+        const totalPool = currentBets.reduce((sum, b) => sum + b.amount, 0);
+        document.getElementById('total-pool').textContent = `${totalPool} stars`;
+
+        if (currentBets.length > 0) {
+          document.getElementById('min-top1').textContent = `${currentBets[0].amount + 1} stars`;
+        } else {
+          document.getElementById('min-top1').textContent = '1 star';
+        }
+      }
+    }
+
+    function renderLeaderboard() {
+      const container = document.getElementById('leaderboard');
+
+      if (!currentBets || currentBets.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет ставок</div>';
+        return;
+      }
+
+      // Determine winners for current round
+      const winnersCount = currentAuction?.rounds[currentAuction.currentRound]?.prizes?.length || 0;
+
+      container.innerHTML = currentBets.slice(0, 20).map((bet, index) => {
+        const rank = index + 1;
+        const isWinner = rank <= winnersCount;
+        const isMe = bet.odnoklassnikiId === currentUserId;
+
+        let rankClass = '';
+        if (rank === 1) rankClass = 'gold';
+        else if (rank === 2) rankClass = 'silver';
+        else if (rank === 3) rankClass = 'bronze';
+
+        const classes = ['leader-item'];
+        if (isWinner) classes.push('winner');
+        if (isMe) classes.push('me');
+
+        return `
+          <div class="${classes.join(' ')}">
+            <div class="leader-rank ${rankClass}">#${rank}</div>
+            <div class="leader-info">
+              <div class="leader-name">${bet.odnoklassnikiId}${isMe ? ' (Вы)' : ''}</div>
+            </div>
+            <div class="leader-amount">${bet.amount}</div>
+            ${isWinner ? '<span class="winner-badge">WIN</span>' : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderRounds() {
+      const container = document.getElementById('rounds-list');
+      const a = currentAuction;
+
+      if (!a || !a.rounds) {
+        container.innerHTML = '<div class="empty-state">Нет данных</div>';
+        return;
+      }
+
+      container.innerHTML = a.rounds.map((round, index) => {
+        let status = '';
+        if (index < a.currentRound) status = 'completed';
+        else if (index === a.currentRound && a.state === 'active') status = 'active';
+
+        return `
+          <div class="round-item ${status}">
+            <div class="round-number">Раунд ${index + 1}</div>
+            <div class="round-info">
+              <div class="round-duration">${round.duration} сек</div>
+            </div>
+            <div class="round-prizes">
+              ${round.prizes.map((p, i) => `<span class="prize-badge">${i + 1} место: ${p}</span>`).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderWinners() {
+      const a = currentAuction;
+      const container = document.getElementById('winners-list');
+
+      if (!a || !a.winners || a.winners.length === 0) {
+        container.innerHTML = '<div class="empty-state">Нет победителей</div>';
+        return;
+      }
+
+      // Группируем по раундам
+      const winnersByRound = {};
+      a.winners.forEach(w => {
+        if (!winnersByRound[w.roundIndex]) {
+          winnersByRound[w.roundIndex] = [];
+        }
+        winnersByRound[w.roundIndex].push(w);
+      });
+
+      let html = '';
+
+      Object.keys(winnersByRound).sort((a, b) => a - b).forEach(roundIndex => {
+        const roundWinners = winnersByRound[roundIndex].sort((a, b) => a.place - b.place);
+
+        html += `<div class="round-header">Раунд ${parseInt(roundIndex) + 1}</div>`;
+
+        roundWinners.forEach(w => {
+          const isMe = w.userId === currentUserId;
+          let placeClass = '';
+          if (w.place === 1) placeClass = 'gold';
+          else if (w.place === 2) placeClass = 'silver';
+          else if (w.place === 3) placeClass = 'bronze';
+
+          html += `
+            <div class="winner-item ${isMe ? 'me' : ''}">
+              <div class="winner-place ${placeClass}">#${w.place}</div>
+              <div class="winner-details">
+                <div class="winner-name">${w.userId}${isMe ? ' (Вы)' : ''}</div>
+                <div class="winner-bet">Ставка: ${w.stars} stars</div>
+              </div>
+              <div class="winner-prize">
+                <div class="winner-prize-amount">+${w.prize}</div>
+                <div class="winner-prize-label">${a.gift.name}</div>
+              </div>
+            </div>
+          `;
+        });
+      });
+
+      container.innerHTML = html;
+    }
+
+    function updateMyBet() {
+      const section = document.getElementById('my-bet-section');
+
+      // Скрываем когда аукцион завершён
+      if (currentAuction?.state === 'finished') {
+        section.style.display = 'none';
+        return;
+      }
+
+      myBet = currentBets.find(b => b.odnoklassnikiId === currentUserId);
+
+      if (myBet) {
+        section.style.display = 'block';
+        document.getElementById('my-bet-amount').textContent = `${myBet.amount} stars`;
+
+        const rank = currentBets.findIndex(b => b.odnoklassnikiId === currentUserId) + 1;
+        document.getElementById('my-bet-rank').textContent = `#${rank}`;
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    function setQuickBet(amount) {
+      const input = document.getElementById('bet-amount');
+      const current = parseInt(input.value) || 0;
+      input.value = current + amount;
+    }
+
+    async function placeBet() {
+      const amount = parseInt(document.getElementById('bet-amount').value);
+
+      if (!amount || amount < 1) {
+        showToast('Введите сумму ставки', true);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/bet', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': currentUserId
+          },
+          body: JSON.stringify({
+            id: auctionId,
+            stars: amount
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          showToast(`Ставка принята! Всего: ${data.bet?.amount || amount}`);
+          document.getElementById('bet-amount').value = '';
+          loadBalance();
+        } else {
+          const errorMessages = {
+            'AUCTION_NOT_ACTIVE': 'Аукцион не активен',
+            'INSUFFICIENT_BALANCE': 'Недостаточно средств',
+            'INVALID_AMOUNT': 'Неверная сумма'
+          };
+          showToast(errorMessages[data.error] || data.error || 'Ошибка', true);
+        }
+      } catch (e) {
+        console.error('Bet error:', e);
+        showToast('Ошибка сети', true);
+      }
+    }
+
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast show' + (isError ? ' error' : '');
+
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    // Cleanup on page leave
+    window.addEventListener('beforeunload', () => {
+      if (auctionSSE) {
+        auctionSSE.close();
+      }
+    });
+  </script>
+</body>
+</html>

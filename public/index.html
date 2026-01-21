@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CryptoBot - Аукционы</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+
+    h1 {
+      font-size: 24px;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .user-panel {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .user-info {
+      text-align: right;
+    }
+
+    .user-id {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .user-balance {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fbbf24;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #2a2a2a;
+      color: #fff;
+      border: 1px solid #444;
+    }
+
+    .btn-secondary:hover {
+      background: #333;
+    }
+
+    .btn-success {
+      background: #22c55e;
+      color: white;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 30px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid #2a2a2a;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: linear-gradient(180deg, #6366f1, #8b5cf6);
+      border-radius: 2px;
+    }
+
+    /* Login Card */
+    .login-card {
+      max-width: 400px;
+      margin: 100px auto;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 5px;
+    }
+
+    .input-group input, .input-group select {
+      width: 100%;
+      padding: 12px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .input-group input:focus, .input-group select:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    /* Auctions List */
+    .auctions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .auction-card {
+      background: #222;
+      border-radius: 10px;
+      padding: 15px;
+      border: 1px solid #333;
+      transition: all 0.2s;
+    }
+
+    .auction-card:hover {
+      border-color: #6366f1;
+    }
+
+    .auction-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .auction-name {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .auction-state {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .state-active {
+      background: #22c55e33;
+      color: #22c55e;
+    }
+
+    .state-pending {
+      background: #fbbf2433;
+      color: #fbbf24;
+    }
+
+    .state-finished {
+      background: #64748b33;
+      color: #64748b;
+    }
+
+    .auction-info {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #333;
+    }
+
+    .auction-stat {
+      text-align: center;
+    }
+
+    .auction-stat-label {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .auction-stat-value {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .gifts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .gift-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #222;
+      border-radius: 8px;
+    }
+
+    .gift-name {
+      font-weight: 500;
+    }
+
+    .gift-count {
+      color: #8b5cf6;
+      font-weight: 600;
+    }
+
+    /* Mint Form */
+    .mint-form {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .mint-form input {
+      flex: 1;
+      padding: 10px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .mint-form input:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 15px 25px;
+      background: #22c55e;
+      color: white;
+      border-radius: 8px;
+      font-weight: 500;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      background: #ef4444;
+    }
+
+    /* Timer */
+    .timer {
+      font-family: monospace;
+      font-size: 16px;
+      color: #fbbf24;
+    }
+
+    /* Create Auction Form */
+    .create-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-row.single {
+      grid-template-columns: 1fr;
+    }
+
+    .create-form input {
+      padding: 12px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .create-form input:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    .rounds-section {
+      border-top: 1px solid #333;
+      padding-top: 15px;
+    }
+
+    .rounds-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .rounds-header span {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .round-item {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 10px;
+      background: #222;
+      border-radius: 8px;
+    }
+
+    .round-item input {
+      padding: 8px;
+    }
+
+    .btn-remove {
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .btn-add-round {
+      width: 100%;
+      padding: 10px;
+      background: #333;
+      border: 1px dashed #555;
+      border-radius: 8px;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-add-round:hover {
+      background: #444;
+      color: #fff;
+      border-color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login Screen -->
+    <div id="login-screen">
+      <div class="card login-card">
+        <h2 class="card-title">CryptoBot</h2>
+        <div class="input-group">
+          <label>User ID</label>
+          <input type="text" id="login-user-id" placeholder="Введите ваш ID или создайте новый">
+        </div>
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="login()">
+          Войти / Создать аккаунт
+        </button>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" style="display: none;">
+      <header>
+        <h1>CryptoBot Auctions</h1>
+        <div class="user-panel">
+          <div class="user-info">
+            <div class="user-id" id="display-user-id">user123</div>
+            <div class="user-balance"><span id="display-balance">0</span> stars</div>
+          </div>
+          <button class="btn btn-secondary" onclick="logout()">Выйти</button>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- Auctions -->
+        <div class="main-content">
+          <div class="card">
+            <h3 class="card-title">Активные аукционы</h3>
+            <div id="auctions-list" class="auctions-list">
+              <div class="empty-state">Загрузка...</div>
+            </div>
+          </div>
+
+          <!-- Create Auction -->
+          <div class="card" style="margin-top: 20px;">
+            <h3 class="card-title">Создать аукцион</h3>
+            <div class="create-form">
+              <div class="form-row single">
+                <input type="text" id="auction-name" placeholder="Название аукциона">
+              </div>
+              <div class="form-row single">
+                <input type="text" id="auction-gift-name" placeholder="Название подарка (из инвентаря)">
+              </div>
+              <div class="form-row single">
+                <input type="number" id="auction-start-delay" placeholder="Старт через (сек)" value="60">
+              </div>
+
+              <div class="rounds-section">
+                <div class="rounds-header">
+                  <span>Раунды</span>
+                  <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="addRound()">+ Раунд</button>
+                </div>
+                <div id="rounds-list">
+                  <div class="round-item" data-round="0">
+                    <input type="number" placeholder="Длительность (сек)" value="120" class="round-duration">
+                    <input type="text" placeholder="Призы (5,3,2)" value="5,3,2" class="round-prizes">
+                    <button class="btn-remove" onclick="removeRound(this)">x</button>
+                  </div>
+                </div>
+                <button class="btn-add-round" onclick="addRound()">+ Добавить раунд</button>
+              </div>
+
+              <button class="btn btn-primary" style="margin-top: 10px;" onclick="createAuction()">
+                Создать аукцион
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <!-- User Gifts -->
+          <div class="card">
+            <h3 class="card-title">Мои подарки</h3>
+            <div id="gifts-list" class="gifts-list">
+              <div class="empty-state">Нет подарков</div>
+            </div>
+            <div class="mint-form">
+              <input type="text" id="mint-gift-name" placeholder="Название">
+              <input type="number" id="mint-gift-count" placeholder="Кол-во" value="100" style="width: 80px;">
+              <button class="btn btn-success" onclick="mintGifts()">+</button>
+            </div>
+          </div>
+
+          <!-- Add Balance -->
+          <div class="card">
+            <h3 class="card-title">Пополнить баланс</h3>
+            <div class="mint-form">
+              <input type="number" id="mint-stars-amount" placeholder="Количество звёзд" value="1000">
+              <button class="btn btn-success" onclick="mintStars()">Добавить</button>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="card">
+            <h3 class="card-title">Быстрые действия</h3>
+            <button class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="refreshData()">
+              Обновить данные
+            </button>
+            <button class="btn btn-secondary" style="width: 100%;" onclick="resetUser()">
+              Сбросить аккаунт
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let currentUserId = localStorage.getItem('userId') || '';
+    let refreshInterval = null;
+    let auctionsSSE = null;
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+      if (currentUserId) {
+        showApp();
+      }
+    });
+
+    // Login
+    async function login() {
+      const userId = document.getElementById('login-user-id').value.trim();
+      if (!userId) {
+        showToast('Введите User ID', true);
+        return;
+      }
+
+      currentUserId = userId;
+      localStorage.setItem('userId', userId);
+
+      // Create user if not exists
+      try {
+        await fetch('/api/data/user', {
+          headers: { 'x-user-id': userId }
+        });
+        showApp();
+        showToast('Добро пожаловать!');
+      } catch (e) {
+        showToast('Ошибка подключения', true);
+      }
+    }
+
+    function logout() {
+      currentUserId = '';
+      localStorage.removeItem('userId');
+      clearInterval(refreshInterval);
+      if (auctionsSSE) {
+        auctionsSSE.close();
+        auctionsSSE = null;
+      }
+      document.getElementById('login-screen').style.display = 'block';
+      document.getElementById('main-app').style.display = 'none';
+    }
+
+    function showApp() {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('main-app').style.display = 'block';
+      document.getElementById('display-user-id').textContent = currentUserId;
+      refreshData();
+
+      // SSE для аукционов
+      connectAuctionsSSE();
+
+      // Auto refresh user data every 5 seconds
+      refreshInterval = setInterval(refreshUserData, 5000);
+    }
+
+    function connectAuctionsSSE() {
+      if (auctionsSSE) {
+        auctionsSSE.close();
+      }
+
+      auctionsSSE = new EventSource('/api/data/auctions/sse');
+
+      auctionsSSE.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          renderAuctions(data.auctions || []);
+        } catch (e) {
+          console.error('SSE parse error:', e);
+        }
+      };
+
+      auctionsSSE.onerror = () => {
+        console.error('SSE connection error, reconnecting...');
+        setTimeout(connectAuctionsSSE, 3000);
+      };
+    }
+
+    async function refreshUserData() {
+      const [user, balance] = await Promise.all([
+        fetchUserData(),
+        fetchBalance()
+      ]);
+
+      document.getElementById('display-balance').textContent = balance;
+
+      const giftsContainer = document.getElementById('gifts-list');
+      if (user && user.gifts && user.gifts.length > 0) {
+        giftsContainer.innerHTML = user.gifts.map(g => `
+          <div class="gift-item">
+            <span class="gift-name">${g.name}</span>
+            <span class="gift-count">${g.count}</span>
+          </div>
+        `).join('');
+      } else {
+        giftsContainer.innerHTML = '<div class="empty-state">Нет подарков</div>';
+      }
+    }
+
+    // Fetch user data
+    async function fetchUserData() {
+      try {
+        const res = await fetch('/api/data/user', {
+          headers: { 'x-user-id': currentUserId }
+        });
+        return await res.json();
+      } catch (e) {
+        console.error('Failed to fetch user:', e);
+        return null;
+      }
+    }
+
+    // Fetch balance
+    async function fetchBalance() {
+      try {
+        const res = await fetch('/api/data/user/balance', {
+          headers: { 'x-user-id': currentUserId }
+        });
+        const data = await res.json();
+        return data.available;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    // Fetch auctions
+    async function fetchAuctions() {
+      try {
+        const res = await fetch('/api/data/auctions', {
+          headers: { 'x-user-id': currentUserId }
+        });
+        const data = await res.json();
+        return data.auctions || [];
+      } catch (e) {
+        console.error('Failed to fetch auctions:', e);
+        return [];
+      }
+    }
+
+    // Refresh all data (initial load)
+    async function refreshData() {
+      await refreshUserData();
+      const auctions = await fetchAuctions();
+      renderAuctions(auctions);
+    }
+
+    // Render auctions list
+    function renderAuctions(auctions) {
+      const auctionsContainer = document.getElementById('auctions-list');
+      if (auctions && auctions.length > 0) {
+        auctionsContainer.innerHTML = auctions.map(a => {
+          const stateClass = `state-${a.state}`;
+          const stateText = {
+            'pending': 'Ожидание',
+            'active': 'Активен',
+            'finished': 'Завершён',
+            'cancelled': 'Отменён'
+          }[a.state] || a.state;
+
+          const currentRound = a.currentRound >= 0 ? a.currentRound + 1 : 0;
+          const totalRounds = a.rounds.length;
+
+          let timeLeft = '';
+          if (a.state === 'active' && a.rounds[a.currentRound]) {
+            const roundDuration = a.rounds[a.currentRound].duration * 1000;
+            const elapsed = Date.now() - a.startTime;
+            let totalElapsed = elapsed;
+            for (let i = 0; i < a.currentRound; i++) {
+              totalElapsed -= a.rounds[i].duration * 1000;
+            }
+            const remaining = Math.max(0, roundDuration - totalElapsed);
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            timeLeft = `${mins}:${secs.toString().padStart(2, '0')}`;
+          } else if (a.state === 'pending') {
+            const remaining = Math.max(0, a.startTime - Date.now());
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            timeLeft = `${mins}:${secs.toString().padStart(2, '0')}`;
+          }
+
+          return `
+            <div class="auction-card" onclick="window.location.href='/auction.html?id=${a.id}'" style="cursor: pointer;">
+              <div class="auction-header">
+                <span class="auction-name">${a.name}</span>
+                <span class="auction-state ${stateClass}">${stateText}</span>
+              </div>
+              <div class="auction-info">
+                <div class="auction-stat">
+                  <div class="auction-stat-label">Приз</div>
+                  <div class="auction-stat-value">${a.gift.count} ${a.gift.name}</div>
+                </div>
+                <div class="auction-stat">
+                  <div class="auction-stat-label">Раунд</div>
+                  <div class="auction-stat-value">${currentRound} / ${totalRounds}</div>
+                </div>
+                <div class="auction-stat">
+                  <div class="auction-stat-label">${a.state === 'pending' ? 'До старта' : 'Осталось'}</div>
+                  <div class="auction-stat-value timer">${timeLeft || '--:--'}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        auctionsContainer.innerHTML = '<div class="empty-state">Нет активных аукционов</div>';
+      }
+    }
+
+    // Mint gifts
+    async function mintGifts() {
+      const name = document.getElementById('mint-gift-name').value.trim();
+      const count = parseInt(document.getElementById('mint-gift-count').value) || 100;
+
+      if (!name) {
+        showToast('Введите название подарка', true);
+        return;
+      }
+
+      try {
+        const res = await fetch('/test/mint-gifts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': currentUserId
+          },
+          body: JSON.stringify({ name, count })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Добавлено ${count} ${name}`);
+          document.getElementById('mint-gift-name').value = '';
+          refreshData();
+        } else {
+          showToast(data.error || 'Ошибка', true);
+        }
+      } catch (e) {
+        showToast('Ошибка сети', true);
+      }
+    }
+
+    // Mint stars
+    async function mintStars() {
+      const amount = parseInt(document.getElementById('mint-stars-amount').value) || 1000;
+
+      try {
+        const res = await fetch('/test/mint-stars', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': currentUserId
+          },
+          body: JSON.stringify({ amount })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Добавлено ${amount} stars`);
+          refreshData();
+        } else {
+          showToast(data.error || 'Ошибка', true);
+        }
+      } catch (e) {
+        showToast('Ошибка сети', true);
+      }
+    }
+
+    // Reset user
+    async function resetUser() {
+      if (!confirm('Сбросить аккаунт? Все данные будут удалены.')) return;
+
+      try {
+        const res = await fetch('/test/reset', {
+          method: 'POST',
+          headers: { 'x-user-id': currentUserId }
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast('Аккаунт сброшен');
+          refreshData();
+        }
+      } catch (e) {
+        showToast('Ошибка сети', true);
+      }
+    }
+
+    // Toast notification
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast show' + (isError ? ' error' : '');
+
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3000);
+    }
+
+    // Round counter
+    let roundCounter = 1;
+
+    // Add round
+    function addRound() {
+      const roundsList = document.getElementById('rounds-list');
+      const roundHtml = `
+        <div class="round-item" data-round="${roundCounter}">
+          <input type="number" placeholder="Длительность (сек)" value="120" class="round-duration">
+          <input type="text" placeholder="Призы (5,3,2)" value="5,3,2" class="round-prizes">
+          <button class="btn-remove" onclick="removeRound(this)">x</button>
+        </div>
+      `;
+      roundsList.insertAdjacentHTML('beforeend', roundHtml);
+      roundCounter++;
+    }
+
+    // Remove round
+    function removeRound(btn) {
+      const roundsList = document.getElementById('rounds-list');
+      if (roundsList.children.length > 1) {
+        btn.closest('.round-item').remove();
+      } else {
+        showToast('Нужен хотя бы один раунд', true);
+      }
+    }
+
+    // Create auction
+    async function createAuction() {
+      const name = document.getElementById('auction-name').value.trim();
+      const giftName = document.getElementById('auction-gift-name').value.trim();
+      const startDelay = parseInt(document.getElementById('auction-start-delay').value) || 60;
+
+      if (!name) {
+        showToast('Введите название аукциона', true);
+        return;
+      }
+      if (!giftName) {
+        showToast('Введите название подарка', true);
+        return;
+      }
+
+      // Collect rounds
+      const roundItems = document.querySelectorAll('.round-item');
+      const rounds = [];
+
+      for (const item of roundItems) {
+        const duration = parseInt(item.querySelector('.round-duration').value) || 120;
+        const prizesStr = item.querySelector('.round-prizes').value.trim();
+        const prizes = prizesStr.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p) && p > 0);
+
+        if (prizes.length === 0) {
+          showToast('Укажите призы для каждого раунда', true);
+          return;
+        }
+
+        rounds.push({ duration, prizes });
+      }
+
+      // Auto-calculate giftCount from sum of all prizes
+      const giftCount = rounds.reduce((sum, r) => sum + r.prizes.reduce((s, p) => s + p, 0), 0);
+
+      const startTime = Date.now() + (startDelay * 1000);
+
+      try {
+        const res = await fetch('/api/auction/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': currentUserId
+          },
+          body: JSON.stringify({
+            name,
+            giftName,
+            giftCount,
+            startTime,
+            rounds
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.id) {
+          showToast(`Аукцион создан! Призов: ${giftCount}`);
+          // Clear form
+          document.getElementById('auction-name').value = '';
+          document.getElementById('auction-gift-name').value = '';
+          refreshData();
+        } else {
+          showToast(data.error || 'Ошибка создания', true);
+        }
+      } catch (e) {
+        console.error('Create auction error:', e);
+        showToast('Ошибка сети', true);
+      }
+    }
+  </script>
+</body>
+</html>
